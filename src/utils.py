@@ -6,8 +6,7 @@ def print_llm_stream(
     stream: Iterator[BaseMessageChunk], print_reasoning=True, print_response=True
 ):
     response = ""
-    if print_reasoning:
-        print("THINKING START\n")
+    print("THINKING...\n")
     for i in stream:
         if "reasoning_content" in i.additional_kwargs.keys() and print_reasoning:
             print(i.additional_kwargs["reasoning_content"], end="")
