@@ -1,57 +1,48 @@
 from src.state import AgentState
-from langchain_core.messages import ChatMessage, HumanMessage, AIMessage
-from src.prompts.computer import cmp_system_prompt, hide_prompt_text
-from src.utils import print_llm_stream, get_tag
 from src.llm import llm
+from src.prompts.game import system_prompt
 
 
 def cmp_agent(state: AgentState) -> AgentState:
     print("==========COMPUTER TURN============")
 
-    system_prompt = ChatMessage(role="system", content=cmp_system_prompt)
-    curr_messages = [system_prompt]
-
-    judge_messages = state["judge_messages"]
-    cmp_messages = state["cmp_messages"]
-
     if state["cmp_hiding_place"] == "":
-        # hasn't hidden the penny yet
-        hiding_prompt = ChatMessage(
-            role="system",
-            content=hide_prompt_text,
+        prompt = (
+            system_prompt
+            + state["history"]
+            + (
+                "\n\nThe Judge has set the scene as described above."
+                "\nThe computer will now tell the judge where they're hiding their penny."
+                "\n\nCOMPUTER: "
+            )
         )
 
-        response_stream = llm.stream(curr_messages + cmp_messages + [hiding_prompt])
-        response = print_llm_stream(
-            response_stream, print_reasoning=False, print_response=False
-        )
+        response_stream = llm.generate_computer_stream(prompt)
+        full_res = ""
+        for chunk in response_stream:
+            # print(chunk, end="") # don't print it, obviously
+            full_res += chunk
 
-        cmp_hiding_place = get_tag(str(response), "CMP_HIDING_PLACE")
-        response_hiding_place = (
-            f"COMPUTER: I have hidden my penny here: {cmp_hiding_place}\n"
-        )
+        label = full_res.find("COMPUTER: ")
+        label = label if label > -1 else -10
+        state["cmp_hiding_place"] = full_res[label + 10 :]
+        # don't add this to history, cuz, well, obviously
+        state["history"] += "\n\n COMPUTER: I have hidden my penny!\n\n"
 
-        judge_messages.append(HumanMessage(content=response_hiding_place))
-        cmp_messages.append(AIMessage(content=response_hiding_place))
-
-        return {
-            **state,
-            "cmp_hiding_place": cmp_hiding_place,
-            "judge_messages": judge_messages,
-            "cmp_messages": cmp_messages,
-        }
     else:
-        # game has already begun ;)
-        action_response_stream = llm.stream(curr_messages + cmp_messages)
-        action_response = print_llm_stream(
-            action_response_stream, print_reasoning=False
+        # The game has already begun ;)
+        response_stream = llm.generate_computer_stream(
+            system_prompt
+            + state["history"]
+            + "\n\n It's now computer's turn. The computer thinks hard on how to find the human's penny."
+            "\n\nCOMPUTER: "
         )
 
-        judge_messages.append(HumanMessage(content=action_response))
-        cmp_messages.append(AIMessage(content=action_response))
+        full_res = ""
+        for chunk in response_stream:
+            print(chunk, end="")
+            full_res += chunk
 
-        return {
-            **state,
-            "judge_messages": judge_messages,
-            "cmp_messages": cmp_messages,
-        }
+        state["history"] += full_res + "\n\n"
+    print("")
+    return state

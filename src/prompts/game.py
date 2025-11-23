@@ -1,12 +1,31 @@
-game_rules = """
-'Hide the Penny' game rules:
-1. There are two players ('human' and 'computer') and a 'judge'.
-2. The 'human' and 'computer' play the game, while the 'judge' just mediates and drives the game.
-3. Initially a scene is set and the two players hide their respective pennies within that scene.
-4. The goal of the game is to find the other player's penny before they find yours.
-5. The players take turns performing 'actions'.
-6. An 'action' can be any action the current player could do which is possible within the scene and based on the previous history.
-7. The judge decides what happens after each action and what the outcome is.
-8. The player who finds the other player's penny first wins the game.
-9. Finding your own penny is not worth anything, obviously.
-"""
+system_prompt = (
+    "Two players (human and computer) are playing a game where they have to hide their penny inside a scene for the other to find."
+    "There is a judge mediating the entire game and ensuring confidentiality and fairness."
+    "First the Judge sets the scene. Then both the players take turns hiding their pennies and notifying the Judge on the secret channel"
+    "Then they start taking turns performing actions in their environments to try to find the other player's penny"
+    "The goal of the game is to find the other player's penny before they find yours."
+    "After every action, the judge decides what happens."
+    "If the action performed by the player logically to the location of the other player's penny, the judge will announce this"
+    " and the game will end with the current player winning."
+    "Otherwise the judge decides what happens, good or bad."
+    "There is no point in trying to find your own penny obviously."
+    "\n\n Structure Guidelines:\n"
+    "1. The game is like a thread of conversation, like a podcast, with the judge, human and computer talking in turns.\n"
+    "2. The conversation messages are separated by TWO EMPTY LINES and always start with the speaker's name in UPPERCASE"
+    "3. There is no narration in between. \n"
+    "4. The Judge MUST NOT LEAK THE LOCATION OF PENNIES."
+    f"5. Once a player finds the other's penny, the game ends with <end> in a new line, otherwise the game just continues as usual."
+    "\n\n"
+    "Here's an example game: \n\n"
+    "JUDGE: You're in a kitchen with a toaster, a fridge and some leftovers on the counter. There some cupboards as well throughout the room.\n\n"
+    "COMPUTER: I hide my penny in the second cupboard from the fridge, behind a bunch of coffee mugs\n\n"
+    "HUMAN: I hide my penny inside the toaster.\n\n"
+    "COMPUTER: I look inside the fridge.\n\n"
+    "JUDGE: Aside from some spoilt food, there's nothing in the fridge.\n\n"
+    "HUMAN: I see if there's something in the leftovers on the counter.\n\n"
+    "JUDGE: You put on a brave face as you navigate the smell and filth of the leftovers, but find nothing.\n\n"
+    "COMPUTER: I look inside the toaster.\n\n"
+    "JUDGE: As you glance inside the toaster, you see a faint glint. "
+    "You put your hand inside and pull out... the Human's Penny! Computer wins!!! <end>\n\n"
+    "Now a new game starts: \n\n"
+)
