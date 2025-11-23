@@ -1,106 +1,64 @@
 from src.state import AgentState
-from langchain_core.messages import SystemMessage, ChatMessage, AIMessage
-from src.prompts.judge import (
-    judge_system_prompt,
-    setup_prompt,
-    both_hidden_prompt as judge_both_hidden_prompt,
-    game_summary_prompt_text,
-)
-from src.prompts.computer import both_hidden_prompt as cmp_both_hidden_prompt
 import random
-from src.utils import print_llm_stream, get_tag, get_bool_tag
 from src.llm import llm
+from src.prompts.game import system_prompt
 
 
 def judge(state: AgentState) -> AgentState:
     print("==========JUDGE TURN============")
 
-    system_prompt = ChatMessage(role="system", content=judge_system_prompt)
-    curr_messages = [system_prompt]
-
-    judge_messages = state["judge_messages"]
-    cmp_messages = state["cmp_messages"]
-
-    if len(state["judge_messages"]) == 0:
-        # game hasn't started yet
-        # set it up
-        scene_setting_prompt = ChatMessage(
-            role="system",
-            content=setup_prompt,
+    if state["scene_desc"] == "":
+        # scene hasn't been set yet
+        scene_setting_prompt = system_prompt + (
+            "The judge provides the description of the scene the players have to work with, "
+            "and ends by saying HIDE YOUR PENNIES! (uppercase and word-by-word)."
+            "\n\nJUDGE: "
         )
-        response_stream = llm.stream(curr_messages + [scene_setting_prompt])
-        response = print_llm_stream(response_stream, print_reasoning=False)
+        response_stream = llm.generate_judge_stream(scene_setting_prompt)
+        full_res = ""
+        for chunk in response_stream:
+            full_res += chunk
+            print(chunk, end="")
 
-        scene_desc = get_tag(str(response), "SCENE")
-        scene_str = f"JUDGE: The scene is set as follows: \n{scene_desc}\n"
+        msg_end = full_res.find("HIDE YOUR PENNIES!")
+        if msg_end > -1:
+            state["scene_desc"] = full_res[:msg_end]
+        else:
+            print("fallback")
+            # fallback
+            state["scene_desc"] = full_res
 
-        judge_messages.append(AIMessage(content=scene_str))
-        cmp_messages.append(SystemMessage(content=scene_str))
+        state["history"] += full_res + "\n\n"
+        state["turn"] = random.randint(0, 1)
 
-        return {
-            **state,
-            "scene_desc": scene_desc,
-            "judge_messages": judge_messages,
-            "cmp_messages": cmp_messages,
-            "turn": random.randint(0, 1),
-        }
+    elif state["human_hiding_place"] == "" or state["cmp_hiding_place"] == "":
+        state["turn"] = (state["turn"] + 1) % 2
 
-    elif state["cmp_hiding_place"] == "" or state["human_hiding_place"] == "":
-        return {**state, "turn": (state["turn"] + 1) % 2}
-    elif len(state["judge_messages"]) == 3:
-        # both pennies have been hidden
-        both_hidden_msg_content = "Both players have hidden their pennies"
-        judge_messages.append(SystemMessage(content=both_hidden_msg_content))
-        cmp_messages.append(SystemMessage(content=both_hidden_msg_content))
-        turn = (state["turn"] + 1) % 2
-        judge_messages.append(
-            SystemMessage(
-                content=judge_both_hidden_prompt.format(
-                    current_player="computer" if turn == 0 else "human"
-                )
-            )
-        )
-        cmp_messages.append(
-            SystemMessage(
-                content=cmp_both_hidden_prompt.format(
-                    current_player="your" if turn == 0 else "human's"
-                )
-            )
-        )
-        return {
-            **state,
-            "judge_messages": judge_messages,
-            "cmp_messages": cmp_messages,
-            "turn": turn,
-        }
+    elif not state["game_started"]:
+        state["game_started"] = True
+        state["history"] += "JUDGE: Let the game begin!!!\n\n"
+        state["turn"] = (state["turn"] + 1) % 2
     else:
-        # game has already begun ;)
-        # someone just performed an action
-        turn = state["turn"]
+        # game has begun
+        response_stream = llm.generate_judge_stream(
+            system_prompt
+            + state["history"]
+            + f"\n\n (The judge knows that the {"human" if state["turn"] == 0 else "computer"} has hidden their penny here:"
+            f" {state["human_hiding_place"] if state["turn"] == 0 else state["cmp_hiding_place"]})\n"
+            f"Now the judge decides what's going to happen for {"computer" if state["turn"] == 0 else "human"}'s turn."
+            "\n\n JUDGE: "
+        )
 
-        response_stream = llm.stream(curr_messages + judge_messages)
-        response = print_llm_stream(response_stream, print_reasoning=False)
+        full_res = ""
+        for chunk in response_stream:
+            print(chunk, end="")
+            full_res += chunk
 
-        win = False
-        if get_bool_tag(response, "PLAYER_WINS"):
-            win = True
-            response = "\n".join(response.split("\n")[:-2])
-
-        judge_messages.append(AIMessage(content=response))
-        cmp_messages.append(SystemMessage(content=response))
-
-        if win:
-            game_summary_prompt = SystemMessage(content=game_summary_prompt_text)
-            response_stream = llm.stream(
-                curr_messages + judge_messages + [game_summary_prompt]
-            )
-            response = print_llm_stream(response_stream, print_reasoning=False)
-            judge_messages.append(AIMessage(content=response))
-            cmp_messages.append(SystemMessage(content=response))
-
-        return {
-            **state,
-            "judge_messages": judge_messages,
-            "cmp_messages": cmp_messages,
-            "turn": -1 if win else (turn + 1) % 2,
-        }
+        state["history"] += full_res + "\n\n"
+        msg_end = full_res.find("<end>")
+        if msg_end > -1:
+            state["turn"] = -1
+        else:
+            state["turn"] = (state["turn"] + 1) % 2
+    print("")
+    return state
